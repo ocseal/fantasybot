@@ -7,9 +7,6 @@ import string
 import urllib.request
 import sys
 from bs4 import BeautifulSoup; 
-from dotenv import load_dotenv
-
-load_dotenv()
 client = discord.Client(); 
 
 headers = requests.utils.default_headers()
@@ -49,7 +46,14 @@ async def on_message(message):
         return 
       
       if wordList[1].lower() == 'rank' or 'daily':
+        injury = 'https://www.fantasypros.com/nba/rankings/ros-overall.php'
         seasonrank = 'https://www.fantasypros.com/nba/rankings/ros-overall-points-espn.php'
+
+        injurypage = requests.get(injury)
+        injurysoup = BeautifulSoup(injurypage.content, 'html.parser')
+        injurytable = injurysoup.find('table', id = 'data')
+        injurydf = pd.read_html(str(injurytable))[0]
+
         rankpage = requests.get(seasonrank); 
         soup = BeautifulSoup(rankpage.content, 'html.parser')
         table = soup.find('table', id = 'data'); 
@@ -108,16 +112,17 @@ async def on_message(message):
               compare = False
         else: 
           p1 = re.sub(r'\d+', '', df1["Player"].iloc[0])
+          p1injdf = re.sub(r'\d+', '', injurydf["Player"].iloc[0])
           p1first, p1last = p1.split(" ", 1)
           p1last, p1misc = p1last.split(" ", 1)
           p1name = p1first + " " + p1last
           p1injurymessage = ""
           p1injuryemote = ""
-          if p1[-3:] == "OUT":
+          if p1injdf[-3:] == "OUT":
             p1injury = True
             p1injurymessage = " *He is currently injured.*"
             p1injuryemote = ":ambulance: "
-          if p1[-3:] == "DTD" :
+          if p1injdf[-3:] == "DTD" :
             p1injurymessage = " *He is currently day-to-day/questionable.*"
             p1injuryemote = ":question: "
 
@@ -128,16 +133,17 @@ async def on_message(message):
             compare = False
           else:
             p2 = re.sub(r'\d+', '', df2["Player"].iloc[0])
+            p2injdf = re.sub(r'\d+', '', injurydf["Player"].iloc[0])
             p2first, p2last = p2.split(" ", 1)
             p2last, p2misc = p2last.split(" ", 1)
             p2name = p2first + " " + p2last
             p2injurymessage = ""
             p2injuryemote = ""
-            if p2[-3:] == "OUT":
+            if p2injdf[-3:] == "OUT":
               p2injury = True
               p2injurymessage = " *However, he is currently injured.*"
               p2injuryemote = ":ambulance: "
-            if p2[-3:] == "DTD" :
+            if p2injdf[-3:] == "DTD" :
               p2injurymessage = " *However, he is currently day-to-day/questionable.*"
               p2injuryemote = ":question: "
         except:
@@ -282,4 +288,4 @@ async def on_message(message):
       await message.channel.send("Are you sure you have the right syntax? Type '.fs' or '.fs help' to see what I can do.")
       return 
 
-client.run(os.getenv(TOKEN))
+client.run('Nzk1MDE1NDgxNzU2NzQ1NzU5.X_DN3Q.7uT8071hSXk_N1b61zgIvZcwImw')
