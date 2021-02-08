@@ -47,7 +47,7 @@ async def on_message(message):
       
       if wordList[1].lower() == 'rank' or 'daily':
         injury = 'https://www.fantasypros.com/nba/rankings/ros-overall.php'
-        seasonrank = 'https://www.fantasypros.com/nba/rankings/ros-overall-points-espn.php'
+        seasonrank = 'https://www.fantasypros.com/nba/rankings/ros-overall.php'
 
         injurypage = requests.get(injury)
         injurysoup = BeautifulSoup(injurypage.content, 'html.parser')
