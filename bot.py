@@ -288,4 +288,4 @@ async def on_message(message):
       await message.channel.send("Are you sure you have the right syntax? Type '.fs' or '.fs help' to see what I can do.")
       return 
 
-client.run('Nzk1MDE1NDgxNzU2NzQ1NzU5.X_DN3Q.7uT8071hSXk_N1b61zgIvZcwImw')
+client.run(TOKEN)
