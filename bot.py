@@ -11,15 +11,19 @@ import schedule
 import asyncio
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup; 
+
+# Starts the Discord client, allows .env file to be read to keep token secret. 
 client = discord.Client(); 
 load_dotenv()
 
+# Had to change headers for pesky websites that limited bot traffic, but currently no longer used/needed. 
 headers = requests.utils.default_headers()
 headers.update({
   #'user-agent' : "Mozilla/5.0 (X11; CrOS x86_64 13505.63.0) AppleWebKit/537.36 (KHTML, like Gecko)"
   'user-agent' : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36'
 })
 
+# Initializing default messages. 
 embedHelp = discord.Embed(title="Fantasy Bot Functions: **.fs**", description="Call the bot by typing '.fs ____'. Right now, the bot is set to provide fantasy basketball help. Make sure to include all punctuation in player names and to check your spelling. .fs daily has been fixed!", color= 0xffffff)
 embedHelp.add_field(name="Projected Rest-of-Season Rankings: **rank**", value="Type '.fs rank' followed by the last names, full names, or uncommon first names of the players you want to compare (separated by a comma). Expert rankings sourced from FantasyPros.\n**Examples:** \n'.fs rank harden, davis' :ballot_box_with_check:\n'.fs rank giannis, kevin love' :ballot_box_with_check:", inline=False)
 embedHelp.add_field(name="Projected Daily Points: **daily**", value="Type '.fs daily' followed by the last names, full names, or uncommon first names of the players you want to compare (separated by a comma). Expert predictions sourced from Sportsline.\n**Examples:**\n'.fs daily lillard, durant' :ballot_box_with_check:\n'.fs daily leonard, shai' :ballot_box_with_check:", inline=False)
@@ -29,6 +33,7 @@ p1notFound = "I don't recognize your first player. Check your spelling and comma
 p2notFound = "I don't recognize your second player. Check your spelling and comma placement."
 notPlaying = "is not playing today."
 
+# Uses requests, BeautifulSoup and pandas to put website table data in a readable format, then stores dataframe as pickle for efficiency. 
 def pull():
   seasonrank = 'https://www.fantasypros.com/nba/rankings/ros-overall-points-espn.php'
   rankpage = requests.get(seasonrank); 
@@ -46,6 +51,7 @@ def pull():
   dfpoints = pd.read_html(str(table1))[0]
   dfpoints.to_pickle('daily_cache.pkl')
 
+# Uses schedule library to update data every 2 hours. 
 schedule.every(120).minutes.do(pull)
 
 async def task():
@@ -63,6 +69,8 @@ async def on_ready():
 async def on_message(message):
   if message.author == client.user:
     return; 
+
+  # Looks through user input for bot call '.fs'
   
   if message.content.startswith('.fs') or message.content.startswith('.Fs') or message.content.startswith('.FS') or message.content.startswith('.fS'):
     try: 
@@ -77,15 +85,12 @@ async def on_message(message):
         return 
       
       if wordList[1].lower() == 'rank' or 'daily':
-        # injury = 'https://www.fantasypros.com/nba/rankings/overall.php'
-        # injurypage = requests.get(injury)
-        # injurysoup = BeautifulSoup(injurypage.content, 'html.parser')
-        # injurytable = injurysoup.find('table', id = 'data')
-        # injurydf = pd.read_html(str(injurytable))[0]
         df = pd.read_pickle('rank_cache.pkl')
         p1injury = False
         p2injury = False
         compare = True
+
+        # Splits message string into one or two comparable players. 
 
         try: 
           p1, p2 = message.content.split(",")
@@ -103,6 +108,7 @@ async def on_message(message):
           p2 = None
           compare = False
 
+        # Typo correcting for players with periods in their names. 
         try: 
           p1 = ['P.J.' if name == 'Pj' else name for name in p1]
           p1 = ['T.J.' if name == 'Tj' else name for name in p1]
@@ -121,13 +127,16 @@ async def on_message(message):
           p2 = ['D.J.' if name == 'Dj' else name for name in p2]
           player2 = p2[0] + " " + p2[1]
           df2 = df[df["Player"].str.contains(player2, case = False, na = False)]
+
         except IndexError: 
           p2 = ['LeBron' if name == 'James' else name for name in p2]
           player2 = p2[0]
           df2 = df[df["Player"].str.contains(player2, na=False, case= False)] 
+
         except TypeError:
           pass
 
+        # Uses rank dataframe to verify existence of players, then sends a message with rank information by reading dataframe. 
         if df1.dropna().empty:
             await message.channel.send(p1notFound)
             if p2 is None:
@@ -137,7 +146,6 @@ async def on_message(message):
               compare = False
         else: 
           p1 = re.sub(r'\d+', '', df1["Player"].iloc[0])
-          # p1injdf = re.sub(r'\d+', '', injurydf["Player"].iloc[0])
           p1first, p1last = p1.split(" ", 1)
           p1last, p1misc = p1last.split(" ", 1)
           p1name = p1first + " " + p1last
@@ -211,6 +219,8 @@ async def on_message(message):
             else:
               await message.channel.send(p2message)
               return
+
+        # Same function as rank, but with the daily projected points dataframe. 
 
         if wordList[1].lower() == 'daily':
           dfpoints = pd.read_pickle('daily_cache.pkl')
