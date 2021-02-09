@@ -6,8 +6,13 @@ import pandas as pd
 import string
 import urllib.request
 import sys
+import time
+import schedule
+import asyncio
+from dotenv import load_dotenv
 from bs4 import BeautifulSoup; 
 client = discord.Client(); 
+load_dotenv()
 
 headers = requests.utils.default_headers()
 headers.update({
@@ -15,18 +20,44 @@ headers.update({
   'user-agent' : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36'
 })
 
-embedHelp = discord.Embed(title="Fantasy Bot Functions: **.fs**", description="Call the bot by typing '.fs ____'. Right now, the bot is set to provide fantasy basketball help. Make sure to include all punctuation in player names and to check your spelling. Currently, '.fs daily' is slow because one of the websites is making it harder for me to take its data.", color= 0xffffff)
-embedHelp.add_field(name="Projected Rest-of-Season Rankings: **rank**", value="Type '.fs rank' followed by the last names, full names, or uncommon first names of the players you want to compare (separated by a comma).\n**Examples:** \n'.fs rank harden, davis' :ballot_box_with_check:\n'.fs rank giannis, kevin love' :ballot_box_with_check:", inline=False)
-embedHelp.add_field(name="Projected Daily Points: **daily**", value="Type '.fs daily' followed by the last names, full names, or uncommon first names of the players you want to compare (separated by a comma).\n**Examples:**\n'.fs daily lillard, durant' :ballot_box_with_check:\n'.fs daily leonard, shai' :ballot_box_with_check:", inline=False)
+embedHelp = discord.Embed(title="Fantasy Bot Functions: **.fs**", description="Call the bot by typing '.fs ____'. Right now, the bot is set to provide fantasy basketball help. Make sure to include all punctuation in player names and to check your spelling. .fs daily has been fixed!", color= 0xffffff)
+embedHelp.add_field(name="Projected Rest-of-Season Rankings: **rank**", value="Type '.fs rank' followed by the last names, full names, or uncommon first names of the players you want to compare (separated by a comma). Expert rankings sourced from FantasyPros.\n**Examples:** \n'.fs rank harden, davis' :ballot_box_with_check:\n'.fs rank giannis, kevin love' :ballot_box_with_check:", inline=False)
+embedHelp.add_field(name="Projected Daily Points: **daily**", value="Type '.fs daily' followed by the last names, full names, or uncommon first names of the players you want to compare (separated by a comma). Expert predictions sourced from Sportsline.\n**Examples:**\n'.fs daily lillard, durant' :ballot_box_with_check:\n'.fs daily leonard, shai' :ballot_box_with_check:", inline=False)
 embedHelp.add_field(name="For players that share a name or have a common last name, use full names or the highest-ranked player will be returned.", value= "**Example:** '.fs rank seth curry, stephen curry' :ballot_box_with_check:\n'.fs rank curry, anthony-towns' will provide results for Stephen Curry, not Seth Curry.")
 playersNotFoundMessage = "One or both of your players couldn't be found. Check your spelling and comma placement."
 p1notFound = "I don't recognize your first player. Check your spelling and comma placement."
 p2notFound = "I don't recognize your second player. Check your spelling and comma placement."
 notPlaying = "is not playing today."
 
+def pull():
+  seasonrank = 'https://www.fantasypros.com/nba/rankings/ros-overall-points-espn.php'
+  rankpage = requests.get(seasonrank); 
+  soup = BeautifulSoup(rankpage.content, 'html.parser')
+  table = soup.find('table', id = 'data'); 
+  df = pd.read_html(str(table))[0]
+  df.to_pickle('rank_cache.pkl')
+  projpoints = 'https://www.sportsline.com/nba/expert-projections/simulation/'
+  pointspage = requests.get(projpoints); 
+  soup1 = BeautifulSoup(pointspage.content, 'html.parser')
+  table1 = soup1.find('table'); 
+  #pointspage = urllib.request.urlopen(projpoints)
+  #soup1 = BeautifulSoup(pointspage, 'lxml')
+  #table1 = soup1.find('table'); 
+  dfpoints = pd.read_html(str(table1))[0]
+  dfpoints.to_pickle('daily_cache.pkl')
+
+schedule.every(120).minutes.do(pull)
+
+async def task():
+  while True:
+    schedule.run_pending()
+    await asyncio.sleep(1)
+
 @client.event
 async def on_ready():
   print('Logged in as {0.user}'.format(client))
+  pull()
+  client.loop.create_task(task())
 
 @client.event 
 async def on_message(message):
@@ -46,18 +77,12 @@ async def on_message(message):
         return 
       
       if wordList[1].lower() == 'rank' or 'daily':
-        injury = 'https://www.fantasypros.com/nba/rankings/ros-overall.php'
-        seasonrank = 'https://www.fantasypros.com/nba/rankings/ros-overall.php'
-
-        injurypage = requests.get(injury)
-        injurysoup = BeautifulSoup(injurypage.content, 'html.parser')
-        injurytable = injurysoup.find('table', id = 'data')
-        injurydf = pd.read_html(str(injurytable))[0]
-
-        rankpage = requests.get(seasonrank); 
-        soup = BeautifulSoup(rankpage.content, 'html.parser')
-        table = soup.find('table', id = 'data'); 
-        df = pd.read_html(str(table))[0]
+        # injury = 'https://www.fantasypros.com/nba/rankings/overall.php'
+        # injurypage = requests.get(injury)
+        # injurysoup = BeautifulSoup(injurypage.content, 'html.parser')
+        # injurytable = injurysoup.find('table', id = 'data')
+        # injurydf = pd.read_html(str(injurytable))[0]
+        df = pd.read_pickle('rank_cache.pkl')
         p1injury = False
         p2injury = False
         compare = True
@@ -112,17 +137,17 @@ async def on_message(message):
               compare = False
         else: 
           p1 = re.sub(r'\d+', '', df1["Player"].iloc[0])
-          p1injdf = re.sub(r'\d+', '', injurydf["Player"].iloc[0])
+          # p1injdf = re.sub(r'\d+', '', injurydf["Player"].iloc[0])
           p1first, p1last = p1.split(" ", 1)
           p1last, p1misc = p1last.split(" ", 1)
           p1name = p1first + " " + p1last
           p1injurymessage = ""
           p1injuryemote = ""
-          if p1injdf[-3:] == "OUT":
+          if p1[-3:] == "OUT":
             p1injury = True
             p1injurymessage = " *He is currently injured.*"
             p1injuryemote = ":ambulance: "
-          if p1injdf[-3:] == "DTD" :
+          if p1[-3:] == "DTD" :
             p1injurymessage = " *He is currently day-to-day/questionable.*"
             p1injuryemote = ":question: "
 
@@ -133,18 +158,18 @@ async def on_message(message):
             compare = False
           else:
             p2 = re.sub(r'\d+', '', df2["Player"].iloc[0])
-            p2injdf = re.sub(r'\d+', '', injurydf["Player"].iloc[0])
+            # p2injdf = re.sub(r'\d+', '', injurydf["Player"].iloc[0])
             p2first, p2last = p2.split(" ", 1)
             p2last, p2misc = p2last.split(" ", 1)
             p2name = p2first + " " + p2last
             p2injurymessage = ""
             p2injuryemote = ""
-            if p2injdf[-3:] == "OUT":
+            if p2[-3:] == "OUT":
               p2injury = True
-              p2injurymessage = " *However, he is currently injured.*"
+              p2injurymessage = " *He is currently injured.*"
               p2injuryemote = ":ambulance: "
-            if p2injdf[-3:] == "DTD" :
-              p2injurymessage = " *However, he is currently day-to-day/questionable.*"
+            if p2[-3:] == "DTD" :
+              p2injurymessage = " *He is currently day-to-day/questionable.*"
               p2injuryemote = ":question: "
         except:
           pass
@@ -188,11 +213,7 @@ async def on_message(message):
               return
 
         if wordList[1].lower() == 'daily':
-          projpoints = 'https://www.fantasysp.com/projections/basketball/daily/'
-          pointspage = urllib.request.urlopen(projpoints)
-          soup1 = BeautifulSoup(pointspage, 'lxml')
-          table1 = soup1.find('table'); 
-          dfpoints = pd.read_html(str(table1))[0]
+          dfpoints = pd.read_pickle('daily_cache.pkl')
 
           if p1 is None and p2 is None:
             return
@@ -201,12 +222,12 @@ async def on_message(message):
             compare = False 
 
           try:
-            dfp1 = dfpoints[dfpoints["Name"].str.contains(player1, case = False, na = False)]
+            dfp1 = dfpoints[dfpoints["PLAYER"].str.contains(player1, case = False, na = False)]
           except: 
             compare = False
           
           try:
-            dfp2 = dfpoints[dfpoints["Name"].str.contains(player2, case = False, na = False)]
+            dfp2 = dfpoints[dfpoints["PLAYER"].str.contains(player2, case = False, na = False)]
           except:
             compare = False
 
@@ -226,12 +247,12 @@ async def on_message(message):
             
           if p1 is not None: 
             try: 
-              p1opp = dfp1.iloc[0, 2]
-              p1opp, p1sched = p1opp.split(" ", 1)
-              if '@' in p1opp:
-                p1opp = p1opp[1:]
-              p1points= dfp1.iloc[0, 18]
-              p1message = "**" + p1name + "** " + p1injuryemote + "vs. " + p1opp + " : **" + str(p1points) + "** projected ESPN fantasy points." + p1injurymessage
+              p1team = dfp1.iloc[0, 2]
+              p1game = dfp1.iloc[0, 3]
+              p1game = p1game.replace(p1team, "")
+              p1opp = p1game.replace("@", "")
+              p1points= dfp1.iloc[0, 4]
+              p1message = "**" + p1name + "** " + p1injuryemote + "vs. " + p1opp + ": **" + str(p1points) + "** projected fantasy points." + p1injurymessage
               if p1injury == True:
                 p1points = 0
             except:
@@ -242,12 +263,12 @@ async def on_message(message):
 
           if p2 is not None: 
             try: 
-              p2opp = dfp2.iloc[0, 2]
-              p2opp, p2sched = p2opp.split(" ", 1)
-              if '@' in p2opp:
-                p2opp = p2opp[1:]
-              p2points = dfp2.iloc[0, 18]
-              p2message = "**" + p2name + "** " + p2injuryemote + "vs. " + p2opp + " : **" + str(p2points) + "** projected ESPN fantasy points." + p2injurymessage
+              p2team = dfp2.iloc[0, 2]
+              p2game = dfp2.iloc[0, 3]
+              p2game = p2game.replace(p2team, "")
+              p2opp = p2game.replace("@", "")
+              p2points = dfp2.iloc[0, 4]
+              p2message = "**" + p2name + "** " + p2injuryemote + "vs. " + p2opp + ": **" + str(p2points) + "** projected fantasy points." + p2injurymessage
               if p2injury == True:
                 p2points = 0
             except: 
@@ -288,4 +309,4 @@ async def on_message(message):
       await message.channel.send("Are you sure you have the right syntax? Type '.fs' or '.fs help' to see what I can do.")
       return 
 
-client.run(TOKEN)
+client.run(os.getenv('TOKEN'))
